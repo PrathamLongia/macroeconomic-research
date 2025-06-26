@@ -1,0 +1,182 @@
+# @package _global_
+train_nn:
+    _target_: train_nn.Train_NN
+    dtype: float32  # Data precision for tensors
+    # Variables for loading
+    loading_saved_model_S: false     # Indicator for loading S
+    loading_saved_init_S: false      # Indicator for loading init S
+    loading_saved_init_V_u: false  # Indicator for loading init V_u
+    loading_saved_init_V_v: false  # Indicator for loading init V_v
+    load_g_ss: false                 # Indicator for loading g_ss,g_high_z,g_low_z
+    load_ss_surrogate: false         # Indicator for loading surrogate models for steady state
+    # Solver method
+    M_par_ss: 256  # number of parameter sets solved for steady state
+    c_tightness: false   # whether to use c(par_draw) making DSS at z_0 to have the wanted tightness
+    ss_fb: false                    # Indicator for a Forward-Backward steady state solver
+    br_fp_dynamic: true    # if using fixed-point solver for dynamic block-recursive problem instead of NN
+    br_static_dynamic_g: false  # if solve stationary distribution from dynamic KFE=0
+    ss_as_ergodic: false  # if using z_0 DSS g as ergodic g
+    # Network structure
+    nn_width: 64            # Network width per layer
+    nn_num_layers: 5        # Number of layers
+    # Training parameters
+    wage_dynamics: false  # Whether training V_u,V_v to plot wage dynamics
+    save_freq: 10000      # save once every save_freq loops
+    sample_low: 1024       # sample number for first round of training
+    sample_high: 2048      # sample number for 2nd round of training
+    lr: 1e-5              # Learning rate for main
+    lr_low: 1e-6          # lower learning rate for 2nd round of training
+    lr_init: 1e-3         # Learning rate for initialization
+    lr_surrogate: 1e-3    # Learning rate for SS surrogate models
+    epochs: 200001        # Epochs for main, lr
+    epochs_low: 200001    # Epochs for main, low lr
+    epochs_init: 50001    # Epochs for initialization
+    par_g_conditional_sampling: true  # whether to sample g conditionally on par_draw
+    ss_surrogate_method: 'NN'  # 'NN'|'interpolate'
+    epochs_ss_surrogate: 15001  # Epochs for training SS surrogate models
+    ss_surrogate_val: false  # if validating SS surrogate models
+    g_sample_scale: 1.  # sample g on [g_low, g_high] expanded by g_sample_scale(half low, half high)
+    sample_g: 'normal'  # 'normal';'uniform';'noise'
+    g_sample_noise_std: 0.01  # if sample_g=='noise', noise std for sampling g
+    # Variables for Environment
+    par: { # basic estimable parameters. values below are for initial guesses&default simulation
+        beta: 0.72,            # Surplus share for workers
+        c: 4.62519168853759,  # Free entry cost (value of c in HLM SS with same parameters). Will be automatically calibrated, not 0 is enough
+        rho: 0.05,             # Discount rate
+        delta: .02,            # Match exit rate. LR yearly equivalent:.9276
+        b: .01,                # Unemployment benefit
+        xi: 2.5,               # Acceptance paramter to surplus
+        xi_e: .02,            # OJS accept paramter to surplus
+        eta: .79,            # Intensity of endogenous separation probability
+        phi: .08,              # Exogenous relative intensity at which employed workers search. LR:0.027
+        kappa: 15.55,          # Matching function parameter 13.63607274109090106151;7;
+        nu: 0.49995,               # Matching function parameter
+        lam_L: 0.08,            # Jump rate from low to high
+        lam_H: 0.08,            # Jump rate from high to low
+        z_0: 1.0,
+        dz: 0.015               # LR:0.451092015519
+    }
+    nx: 7                # Number of worker types
+    ny: 8                # Number of firm types
+    nz: 2               # Number of productivity states
+    prod_type: 'CES'      # Production function type
+    alpha_type: 'continuous'  # Alpha function type
+    alpha_b_type: true  # false: alpha_b=0;'LIM': continuous alpha_b;'DIS':discrete
+    alpha_e_type: 'D'  # S:Single condition S_new>S_old; D:Double conditions, S_new>S_old & S_new>0
+    no_fe: false         # Indicator for not using Free-Entry
+    # SS calibration of entry cost
+    calibrate_init_c: true  # whether to calibrate initial c to target DSS tightness without free-ent
+    init_v_u_ratio: .634       # V/U to be calibrated at DSS z_0.LR:.634
+    # fixed-point kappa calibration
+    calibrate_kappa: false # Indicator whether to calibrate kappa for unemployment at DSS
+    U_target: 0.06          # target DSS unemployment when calibrating kappa
+    kappa_min: 0.1          # minimum kappa when using bisection to calibrate kappa for unemployment at DSS
+    kappa_max: 50.4          # maximum kappa when using bisection to calibrate kappa for unemployment at DSS
+
+
+    # Estimation NN
+    par_range:
+        kappa:
+            _target_: torch.distributions.Uniform
+            low: 14
+            high: 17  # prior distribution of estimated parameters. NOTE:still need
+        beta:
+            _target_: torch.distributions.Uniform
+            low: 0.7
+            high: 0.83
+        phi:
+            _target_: torch.distributions.Uniform
+            low: 0.075
+            high: 0.12
+        eta:
+            _target_: torch.distributions.Uniform
+            low: .75
+            high: .8
+        b:
+            _target_: torch.distributions.Uniform
+            low: 0.0075
+            high: 0.025
+        delta:
+            _target_: torch.distributions.Uniform
+            low: 0.0175
+            high: 0.0325
+
+    par_sim:  # values for initial guess & simulation
+        # 'kappa': 7,
+
+    N_erg: 10  # num of simulations for one parameter draw
+    flow_rate: true  # if use rate or absolute value of flow as target for calibration.
+    monthly_flow: true  # if use monthly flow;otherwise, use annual flow as target for calibration.
+
+# Calibration
+moment_names: [U, V, e2e, e2u, u2e, TFP] # All possible variables (names) for calibration
+calibrator:
+    _target_: calibrator.Calibrator
+    # Moments for calibration
+    moment_types: [mean, std, autocorr] # Types of moments for calibration
+    if_mean_wage: false  # if use mean_wage as target for calibration. This is separater from computing other wage moments
+    target_moments:
+        mean:
+            U: .058
+            V: .036772
+            e2e: .025
+            e2u: .025
+            u2e: .421
+        # EE hires:  .2369=.3*.07*12*.94;  LR:.2826=.025*12*.942
+        # EU losses: .1692=.015*12*.94; LR:.2826=.025*12*.942
+        # UE hires:  .216=.3*12*.06;   LR: .293=.421*12*.058
+        ## EE Rate: EE hires/Employed. =.3*.07=.021, *12=.252;LR:.3=0.025*12. Moscarini&Thomsson(2007)0.361=.032*12
+        ## EU Rate: EU losses/Employed. =.015, *12=.18; LR:.3=0.025*12
+        ## UE Rate: UE hires/Unemployed. =.3, *12=3.6; LR: 5.052=.421*12
+        std:
+            U: .2
+    if_relative_dis: true  # if use relative distance between data and model moments as target for calibration.
+    target_weight:   # weight dict for each target moment when computing moment_distance. null|~|[blank] all means None, which bydefault implies equal weight
+        mean:
+            U: 1
+            V: 1
+            e2e: 0.5
+            e2u: 0.5
+            u2e: 0.1
+        std:
+            U: 0
+    # Simulation parameters
+    T_sim: 2001  # number of periods to simulate for each parameter set
+    N_sim: 10500  # total number of parameter sets to simulate
+    val_ratio: 0.05  # ratio of validation parameter sets
+    mapping_data_gen_method: chunk    # one|on_the_fly|chunk
+    chunk_size: 1500                # For chunk method, number of parameter sets to simulate each chunk(file)
+    n_sim: 500                      # For on_the_fly method, number of parameter sets to simulate each time generating data
+    epoch_resim: 2000               # For on_the_fly method, number of epochs after which we resimulate data
+    # Mapping method
+    mapping_method: NN  # interpolate|NN|grid
+    # NN Mapping training parameters
+    lr: 1e-3              # Learning rate
+    epochs: 10001        # Epochs for calibrator NN training
+    save_freq: 1000      # save once every save_freq epochs
+    batch_size: 32     # batch size for training
+    loss_threshold: 1e-7 # loss thershold for stopping
+    # Interpolation Mapping parameters
+    n_grid_point: 10  # number of grid points for linear interpolation mapping    interp_method: linear  # linear|cubic|quintic|slinear|quintic
+    interp_method: linear  # linear|cubic|quintic|slinear|quintic
+    # Search method
+    search_method: NN  # LBFGS|NN|grid|NN_grid
+    search_NN_bound_regularization_weight: 0.1
+    num_random_starts: 1
+    # Variables for loading
+    load_saved_mapping: false     # Indicator for loading calibrator mapping
+    load_moment_data: false     # Indicator for loading calibrator moment data when getting the mapping, so if the above is true, this won't matter
+    load_ca_result: false     # Indicator for loading calibrator results:optimal par, moments, distance
+    # Distribution for searching over trained surrogate models
+    calibrator_par_range:  # update(expand) the search bounds compared to the training bounds of MasterEq NN & par-mm NN. No need to re-state unchanged bounds
+
+    # Plotting parameters
+    moment_or_dis: 'dis'  # 'dis'|'mm', meaining aggregate distance or individual moment
+
+    # Tabling parameters
+    sim_full_mm: true  # if simulate all moments, targetted&untargetted, for optimal parameter found
+seed: 777
+save_freq: 10000      # save once every save_freq loops
+sample_low: 1024       # sample number for first round of training
+sample_high: 2048      # sample number for 2nd round of training
+lr_low: 1e-6          # lower learning rate for 2nd round of training
